@@ -1,0 +1,128 @@
+---
+title: "244 lab 2"
+author: "Kaley Dodson"
+date: "1/18/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(janitor)
+library(palmerpenguins)
+library(here)
+
+# for PCA
+library(ggfortify)
+
+# for ggplot customization
+library(readxl)
+library(gghighlight)
+library(lubridate)
+library(plotly)
+
+# for compound figures
+library(patchwork)
+```
+
+### Part 1: PCA w/ penguins
+
+```{r}
+penguin_pca <- penguins %>% 
+  select(body_mass_g, ends_with("_mm")) %>% 
+  drop_na() %>% 
+  scale() %>% 
+  prcomp()
+
+# to see loadings
+penguin_pca$rotation
+
+penguin_complete <- penguins %>% 
+  drop_na(body_mass_g, ends_with("_mm"))
+
+autoplot(penguin_pca,
+         data = penguin_complete,
+         colour = 'species',
+         loadings = TRUE,
+         loadings.label = TRUE) +
+  theme_minimal()
+```
+
+### Part 2: ggplot 2 customization & reading in different file types
+
+```{r}
+# read in an .xlsx file + wrangling
+
+fish_noaa <- read_excel(here("data", "foss_landings.xlsx")) %>% 
+  clean_names() %>% 
+  mutate(across(where(is.character), tolower)) %>% 
+  mutate(nmfs_name = str_sub(nmfs_name, end = -4)) %>% 
+  filter(confidentiality == "public")
+```
+
+```{r}
+# create a customized graph
+
+fish_plot <- ggplot(data = fish_noaa, aes(x = year, y = pounds)) +
+  geom_line(aes(color = nmfs_name), show.legend = FALSE) +
+  theme_minimal()
+
+fish_plot
+
+ggplotly(fish_plot)
+
+# highlight certain series with gghighlight
+
+ggplot(data = fish_noaa, aes(x = year, y = pounds, group = nmfs_name)) +
+  geom_line() +
+  theme_minimal() +
+  gghighlight(nmfs_name == "tunas")
+
+ggplot(data = fish_noaa, aes(x = year, y = pounds, group = nmfs_name)) +
+  geom_line(aes(color = nmfs_name)) +
+  theme_minimal() +
+  gghighlight(max(pounds) > 1e8)
+```
+
+```{r}
+# read in a url
+
+monroe_wt <- read_csv("https://data.bloomington.in.gov/dataset/2c81cfe3-62c2-46ed-8fcf-83c1880301d1/resource/13c8f7aa-af51-4008-80a9-56415c7c931e/download/mwtpdailyelectricitybclear.csv") %>% 
+  clean_names()
+```
+
+```{r}
+# manipulate date and convert to factor
+
+monroe_ts <- monroe_wt %>% 
+  mutate(date = mdy(date)) %>% 
+  mutate(record_month = month(date)) %>% 
+  mutate(month_name = month.abb[record_month]) %>% 
+  mutate(month_name = fct_reorder(month_name, record_month))
+
+ggplot(data = monroe_ts, aes(x = month_name, y = total_k_wh)) +
+  geom_jitter()
+```
+
+### Part 3: compound figures with `patchwork` + exporting figures
+
+```{r}
+graph_a <- ggplot(data = penguins, aes(x = body_mass_g, y = flipper_length_mm)) +
+  geom_point()
+
+graph_b <- ggplot(data = penguins, aes(x = species, y = flipper_length_mm)) +
+  geom_jitter(aes(color = species), show.legend = FALSE)
+
+# USE | TO PUT GRAPHS SIDE BY SIDE
+# USE / TO PUT ONE GRAPH ABOVE THE OTHER
+
+graph_c <- (graph_a | graph_b)/fish_plot & theme_dark()
+
+graph_c
+
+ggsave(here("fig", "graph_c_kd.png"), width = 5, height = 6)
+
+```
+
+
